@@ -1,8 +1,8 @@
 {
-  "name": "AutomaticTrainBuilder",
-  "version": "0.4.2",
-  "title": "Automatic Train Builder",
-  "author": "cooky173",
+  "name": "AutomaticTrainBuilder_FixForModdedTrains",
+  "version": "0.5.0",
+  "title": "Automatic Train Builder Fix for Modded Trains",
+  "author": "jimmyjon711 (original author cooky173)",
   "description": "Build Trains Automatically-See Mod Portal for instructions",
   "factorio_version": "0.16"
 }
