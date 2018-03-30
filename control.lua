@@ -57,7 +57,7 @@ end
 
 function addTCCToTable(entity)
   table.insert(TrainCreators, entity)
-  game.players[1].print("Connect chest to a station, rail signal and constant combinator with red/green wire. Set the chest to request from signal network for simplest operation. Request locos and wagons in the build order desired in the combinator. Request fuel for automatic fueling. If there is a train near the wired station it will be used as a template for the created train otherwise the train will be assigned the name of the wired station as a destination. If the wired station has a number as the first characters this will be treated as the number of trains to build. Otherwise unlimited trains will be built.")
+  entity.last_user.print("Connect chest to a station, rail signal and constant combinator with red/green wire. Set the chest to request from signal network for simplest operation. Request locos and wagons in the build order desired in the combinator. Request fuel for automatic fueling. If there is a train near the wired station it will be used as a template for the created train otherwise the train will be assigned the name of the wired station as a destination. If the wired station has a number as the first characters this will be treated as the number of trains to build. Otherwise unlimited trains will be built.")
 end
 
 function removeCreator(entity)
@@ -98,15 +98,24 @@ function updateTrainCreator(creator_chest)
 	station_count = 0
 	signal_count = 0
 	const_comb_count = 0
-  signal = nil
-  stop = nil
+  local signal = nil
+  local stop = nil
+  local combinator = nil
+
+  local signalRed = nil
+  local stopRed = nil
+  local combinatorRed = nil
+
+  local signalGreen = nil
+  local stopGreen = nil
+  local combinatorGreen = nil
 
   signalRed,   stopRed,   combinatorRed   = checkConnectedWire(creator_chest.circuit_connected_entities.red)
   signalGreen, stopGreen, combinatorGreen = checkConnectedWire(creator_chest.circuit_connected_entities.green)
 
   if combinatorRed ~= nil and combinatorGreen ~= nil then
     if not wireWarning then
-       game.print("You can only hook up a red or green wire not both. Please disconnect a color.")
+       creator_chest.last_user.print("You can only hook up a red or green wire not both. Please disconnect a color.")
        wireWarning = true
      end
      return false
@@ -144,38 +153,42 @@ function updateTrainCreator(creator_chest)
 		end
 	end
 end
-
-
 	
 		
 function build_train(creator_chest, combinator, stop, signal, trains_to_build, station_name)
-	build_orientation = signal.direction
-	signal_x = signal.position.x
-	signal_y = signal.position.y
+	local build_orientation = signal.direction
+	local signal_x = signal.position.x
+	local signal_y = signal.position.y
+
 	if build_orientation == 0 then -- signal for southbound travel
+    build_orientation = defines.direction.south
 		build_location_x = signal_x + 1.5
-		build_location_y = signal_y + 6.5
-	elseif build_orientation == 2 then
-		build_location_x = signal_x - 6.5
-		build_location_y = signal_y + 1.5
-	elseif build_orientation == 4 then -- signal for northbound travel
-		build_location_x = signal_x - 1.5
-		build_location_y = signal_y - 6.5
+		build_location_y = signal_y - 6.5/2
 	elseif build_orientation == 6 then
-		build_location_x = signal_x + 6.5
+    -- Need to flip the train direction opposite of signal
+    build_orientation = defines.direction.east
+		build_location_x = signal_x - 6.5/2
 		build_location_y = signal_y - 1.5
+	elseif build_orientation == 4 then -- signal for northbound travel
+    build_orientation = defines.direction.north
+		build_location_x = signal_x - 1.5
+		build_location_y = signal_y + 6.5/2
+	elseif build_orientation == 2 then
+    build_orientation = defines.direction.west
+		build_location_x = signal_x + 6.5/2
+		build_location_y = signal_y + 1.5
 	else
-		game.players[1].print("Sorry, Train Creator not supported on Diagonal rails")
+		creator_chest.last_user.print("Sorry, Train Creator not supported on Diagonal rails")
 		return false
 	end
 
-	if build_orientation == 0 or build_orientation == 6 then
+	if signal.direction == 0 or signal.direction == 6 then
 		sign = 1
 	else
 		sign = -1
 	end
 
-	if build_orientation == 0 or build_orientation == 4 then
+	if signal.direction == 0 or signal.direction == 4 then
 		xmult = 0
 		ymult = 1
 	else
@@ -184,14 +197,14 @@ function build_train(creator_chest, combinator, stop, signal, trains_to_build, s
 	end
 	
 	--work out how many locos and wagons we need to build - this is carried on the combinator circuit
-	
-	locos = 0
-  locoName = ""
-	cargo_wagons = 0
-	fluid_wagons = 0
-	artillery_wagons = 0
-	fuel = 0
-  trainToBuild = {}
+	local fuel_name = nil
+	local locos = 0
+  local locoName = ""
+	local cargo_wagons = 0
+	local fluid_wagons = 0
+	local artillery_wagons = 0
+	local fuel = 0
+  local trainToBuild = {}
 
   --TODO:make this into a function
 	if combinator.get_circuit_network(defines.wire_type.green) ~= nil then
@@ -220,6 +233,7 @@ function build_train(creator_chest, combinator, stop, signal, trains_to_build, s
 			end
 		end
 	end
+
 	if combinator.get_circuit_network(defines.wire_type.red) ~= nil then
 		for _, signal in ipairs(combinator.get_circuit_network(defines.wire_type.red).signals) do
 			name =  signal.signal.name
@@ -254,7 +268,7 @@ function build_train(creator_chest, combinator, stop, signal, trains_to_build, s
 
   if fuel < locos and fuel_name ~= nil then
     if not fuelNotEnoughWarning then
-      game.print("There is not enough fuel to fuel all trains")
+      creator_chest.last_user.print("There is not enough fuel to fuel all trains")
       fuelNotEnoughWarning = true
     end
     return false
@@ -268,7 +282,8 @@ function build_train(creator_chest, combinator, stop, signal, trains_to_build, s
 	
 	--check if we can build the required entities
 	for i = 0, locos+ cargo_wagons + fluid_wagons + artillery_wagons-1, 1 do
-		pos = {build_location_x + 7 * i * sign * xmult, build_location_y + 7 * i * sign * ymult}
+		pos = {build_location_x - 7 * i * sign * xmult, build_location_y - 7 * i * sign * ymult}
+
 		if game.surfaces[1].can_place_entity{name="locomotive", position = pos} == false then
 			return false
 		end
@@ -331,12 +346,12 @@ function build_train(creator_chest, combinator, stop, signal, trains_to_build, s
 
 		if (build ~= nil) and (build_num > 0) then
 			for j = 1,build_num,1 do
-				pos = {build_location_x + 7 * veh * sign * xmult, build_location_y + 7 * veh * sign * ymult}
+				pos = {build_location_x - 7 * veh * sign * xmult, build_location_y - 7 * veh * sign * ymult}
 				created=game.surfaces[1].create_entity{name=build, position = pos, direction = build_orientation, force="player"}
 				veh = veh + 1
 				creator_chest.get_inventory(defines.inventory.chest).remove{name = build, count=1}
 				if not created then
-					game.players[1].print("Something went wrong - is there curved track near the end of train?")
+					creator_chest.last_user.print("Something went wrong - is there curved track near the end of train?")
 					return false
 				end
 				if types == "locomotive" then
@@ -357,7 +372,9 @@ function build_train(creator_chest, combinator, stop, signal, trains_to_build, s
 		records= {{station=station_name, wait_conditions= {{compare_type = "and", type="full"}}}}
 		last_loco.train.schedule = {current=1, records = records }
 	end
+
 	last_loco.train.manual_mode=false
+
 	if trains_to_build ~= nil then
 		stop.backer_name = (tonumber(trains_to_build) - 1)..station_name
 	end
@@ -368,24 +385,16 @@ function get_station_schedule(stop)
 	direction = stop.direction
 	x = stop.position.x
 	y = stop.position.y
-	if (direction == 0) or (direction==2) then
-		x = x - 2
-		y = y + 2
-	else
-		x = x + 2
-		y = y + 2
-	end
-	area = {{x-1,y-1}, {x+1, y+1}}
-	locos = game.surfaces[1].find_entities_filtered{area=area, name="locomotive"}
+
+  area = {{x-3,y-3}, {x+3, y+3}}
+
+	locos = game.surfaces[1].find_entities_filtered{area=area, type="locomotive"}
 	if locos[1]~= nil then
-	
 		return locos[1].train.schedule
 	end
 	return nil
 end
 	
-		
-
 function trains_to_build(train_stop)
 	num = string.match(train_stop.backer_name, "^(%d+).+")
 	remainder = string.match(train_stop.backer_name, "^%d*(.+)")
